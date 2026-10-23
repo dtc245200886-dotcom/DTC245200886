@@ -10,6 +10,7 @@ volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  loki_data:
 
 services:
   # 1. Database Service
@@ -128,3 +129,31 @@ services:
       - monitoring-net
     depends_on:
       - prometheus
+  # 8. Loki Log Aggregator (Commit 3)
+  loki:
+    image: grafana/loki:2.9.3
+    container_name: loki-server
+    restart: always
+    user: "0"
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/tmp/loki
+    networks:
+      - monitoring-net
+
+  # 9. Promtail Log Agent (Commit 3)
+  promtail:
+    image: grafana/promtail:2.9.3
+    container_name: promtail-agent
+    restart: always
+    volumes:
+      - ./promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    networks:
+      - monitoring-net
+    depends_on:
+      - loki
