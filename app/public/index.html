@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taxi Go Enterprise - Advanced Ride Experience & Observability</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f6ff',
+                            100: '#e0edff',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        },
+                        dark: {
+                            bg: '#0B0F17',
+                            card: '#111827',
+                            border: '#1F2937',
+                            hover: '#1E293B'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Font & FontAwesome/Lucide Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Leaflet OpenStreetMap CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #080C14;
+            color: #F3F4F6;
+        }
+
+        /* Glassmorphism effects */
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Custom Leaflet Dark Mode Tiles Override */
+        .dark-tiles .leaflet-tile-container img {
+            filter: brightness(0.7) invert(1) contrast(1.2) hue-rotate(200deg) saturate(0.3);
+        }
+        
+        .leaflet-container {
+            background-color: #0c1017 !important;
+            font-family: inherit;
+        }
+
+        /* Pulsing Marker Animation */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.4); opacity: 0; }
+            100% { transform: scale(0.95); opacity: 0; }
+        }
+
+        .pulse-marker {
+            position: relative;
+        }
+        .pulse-marker::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: rgba(14, 165, 233, 0.6);
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+
+        /* Glow utilities */
+        .glow-blue {
+            box-shadow: 0 0 25px -5px rgba(14, 165, 233, 0.3);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.3);
+        }
+
+        /* Custom Toast Animation */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-toast {
+            animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col bg-[#080C14] text-slate-100">
+
+    <!-- TOP BAR / HEADER -->
+    <header class="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 lg:px-8 flex items-center justify-between z-40 relative">
+        <div class="flex items-center space-x-6">
+            <!-- Brand Logo -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 p-[1px] shadow-lg shadow-sky-500/20">
+                    <div class="w-full h-full bg-slate-950 rounded-[15px] flex items-center justify-center">
+                        <i data-lucide="car" class="w-5 h-5 text-sky-400"></i>
+                    </div>
+                </div>
+                <div>
+                    <span class="text-lg font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-sky-400">
+                        TaxiGo <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">Enterprise</span>
+                    </span>
+                    <p class="text-[10px] text-slate-500 hidden sm:block">Cluster Monitoring & Dispatch System</p>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="hidden md:flex items-center space-x-1 pl-6 border-l border-slate-800">
+                <button onclick="switchTab('booking')" id="tab-btn-booking" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-2 bg-sky-500/10 text-sky-400 border border-sky-500/20 transition-all">
+                    <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                    <span>Đặt Xe & Bản Đồ</span>
+                </button>
+                <button onclick="switchTab('history')" id="tab-btn-history" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all">
+                    <i data-lucide="history" class="w-3.5 h-3.5"></i>
+                    <span>Lịch Sử & Doanh Thu</span>
+                </button>
+                <button onclick="switchTab('management')" id="tab-btn-management" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all">
+                    <i data-lucide="users" class="w-3.5 h-3.5"></i>
+                    <span>Điều Phối</span>
+                </button>
+                <button onclick="switchTab('observability')" id="tab-btn-observability" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all">
+                    <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+                    <span>Hệ Thống & Logs</span>
+                </button>
+            </nav>
+        </div>
+
+        <!-- System Observability Status Widget Header -->
+        <div class="flex items-center space-x-4">
+            <div class="hidden lg:flex items-center space-x-4 px-4 py-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs">
+                <div class="flex items-center space-x-2">
+                    <span id="headerTargetDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span class="text-slate-400">Targets:</span>
+                    <span class="font-mono text-slate-200 font-semibold" id="headerTargetStatus">-- / -- UP</span>
+                </div>
+                <div class="h-3 w-[1px] bg-slate-800"></div>
+                <div class="flex items-center space-x-1.5 text-slate-400">
+                    <i data-lucide="cpu" class="w-3.5 h-3.5 text-sky-400"></i>
+                    <span class="font-mono text-slate-200" id="headerCpuText">--%</span>
+                </div>
+                <div class="h-3 w-[1px] bg-slate-800"></div>
+                <div class="flex items-center space-x-1.5 text-slate-400">
+                    <i data-lucide="database" class="w-3.5 h-3.5 text-purple-400"></i>
+                    <span class="font-mono text-slate-200">PostgreSQL</span>
+                </div>
+            </div>
+
+            <!-- Mobile Menu Toggle Button -->
+            <button onclick="toggleMobileNav()" class="md:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300">
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MOBILE NAVIGATION DROPDOWN -->
+    <div id="mobileNav" class="hidden md:hidden bg-slate-950 border-b border-slate-800 p-3 space-y-2 z-30">
+        <button onclick="switchTab('booking'); toggleMobileNav()" class="w-full text-left px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 bg-sky-500/10 text-sky-400">
+            <i data-lucide="map-pin" class="w-4 h-4"></i>
+            <span>Đặt Xe & Bản Đồ</span>
+        </button>
+        <button onclick="switchTab('history'); toggleMobileNav()" class="w-full text-left px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:bg-slate-900">
+            <i data-lucide="history" class="w-4 h-4"></i>
+            <span>Lịch Sử & Doanh Thu</span>
+        </button>
+        <button onclick="switchTab('management'); toggleMobileNav()" class="w-full text-left px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:bg-slate-900">
+            <i data-lucide="users" class="w-4 h-4"></i>
+            <span>Điều Phối</span>
+        </button>
+        <button onclick="switchTab('observability'); toggleMobileNav()" class="w-full text-left px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:bg-slate-900">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+            <span>Hệ Thống & Logs</span>
+        </button>
+    </div>
+
+    <!-- MAIN APP CONTENT AREA -->
+    <main class="flex-1 relative flex overflow-hidden">
+
+        <!-- TAB 1: RIDE BOOKING & MAP (SPLIT VIEW) -->
+        <div id="view-booking" class="w-full h-full flex flex-col md:flex-row relative">
+            
+            <!-- LEFT CONTROL PANEL (GLASSMORPHISM) -->
+            <aside class="w-full md:w-[420px] lg:w-[450px] h-[62%] md:h-full z-20 flex flex-col border-r border-slate-800/80 bg-slate-950/90 backdrop-blur-2xl overflow-y-auto custom-scrollbar">
+                
+                <!-- Quick Location Selector Header -->
+                <div class="p-5 border-b border-slate-800/80 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold tracking-wide uppercase text-slate-400 flex items-center space-x-2">
+                            <i data-lucide="navigation" class="w-4 h-4 text-sky-400"></i>
+                            <span>Tạo Chuyến Đi Mới</span>
+                        </h2>
+                        <span class="text-[11px] text-sky-400/80 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
+                            Thái Nguyên
+                        </span>
+                    </div>
+
+                    <label class="block space-y-1.5">
+                        <span class="text-[11px] font-semibold text-slate-400">Tên hành khách</span>
+                        <input type="text" id="customerNameInput" maxlength="100" autocomplete="name"
+                            class="w-full bg-slate-900/90 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
+                            placeholder="Nhập tên của bạn">
+                    </label>
+                    <label class="block space-y-1.5">
+                        <span class="text-[11px] font-semibold text-slate-400">Số điện thoại (để nhận diện khách hàng)</span>
+                        <input type="tel" id="customerPhoneInput" maxlength="30" autocomplete="tel"
+                            class="w-full bg-slate-900/90 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
+                            placeholder="Không bắt buộc">
+                    </label>
+
+                    <!-- Location Pickers -->
+                    <div class="space-y-3 relative">
+                        <!-- Pickup Field -->
+                        <div class="relative flex items-center">
+                            <div class="absolute left-3.5 top-3.5 text-emerald-400">
+                                <i data-lucide="circle-dot" class="w-4 h-4"></i>
+                            </div>
+                            <input type="text" id="pickupInput" value="Đại học Thái Nguyên" 
+                                class="w-full bg-slate-900/90 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-2xl pl-10 pr-9 py-3 text-xs font-medium text-slate-200 placeholder-slate-500 transition-all" 
+                                placeholder="Chọn điểm đón trên bản đồ...">
+                            <button onclick="clearInput('pickupInput')" class="absolute right-3 text-slate-500 hover:text-slate-300">
+                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+
+                        <!-- Vertical Connector Line -->
+                        <div class="absolute left-5 top-8 bottom-8 w-[1.5px] bg-gradient-to-b from-emerald-500 to-rose-500 pointer-events-none z-10 opacity-40"></div>
+
+                        <!-- Dropoff Field -->
+                        <div class="relative flex items-center">
+                            <div class="absolute left-3.5 top-3.5 text-rose-400">
+                                <i data-lucide="map-pin" class="w-4 h-4"></i>
+                            </div>
+                            <input type="text" id="dropoffInput" value="Bến xe Thái Nguyên" 
+                                class="w-full bg-slate-900/90 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-2xl pl-10 pr-9 py-3 text-xs font-medium text-slate-200 placeholder-slate-500 transition-all" 
+                                placeholder="Chọn điểm đến...">
+                            <button onclick="clearInput('dropoffInput')" class="absolute right-3 text-slate-500 hover:text-slate-300">
+                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Preset Locations Quick Chips -->
+                    <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 custom-scrollbar text-[11px]">
+                        <span class="text-slate-500 whitespace-nowrap">Nhanh:</span>
+                        <button onclick="setQuickRoute('Đại học Thái Nguyên', 'Bến xe Thái Nguyên')" class="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 whitespace-nowrap">ĐHTN ➔ Bến Xe</button>
+                        <button onclick="setQuickRoute('Bệnh viện Đa khoa', 'Vincom Plaza Thái Nguyên')" class="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 whitespace-nowrap">BV Đa Khoa ➔ Vincom</button>
+                        <button onclick="setQuickRoute('Quảng trường Võ Nguyên Giáp', 'Sân bay Nội Bài')" class="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 whitespace-nowrap">Quảng Trường ➔ Nội Bài</button>
+                    </div>
+                </div>
+
+                <!-- Vehicle Tiers Section -->
+                <div class="p-5 space-y-3 flex-1">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Chọn Loại Xe</h3>
+                    
+                    <div class="space-y-2.5" id="vehicleOptionsList">
+                        <!-- Tier 1: Standard -->
+                        <div onclick="selectVehicleTier('standard')" id="tier-standard" class="tier-card p-3.5 rounded-2xl border border-sky-500 bg-sky-500/10 cursor-pointer transition-all flex items-center justify-between">
+                            <div class="flex items-center space-x-3.5">
+                                <div class="w-12 h-12 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                                    <i data-lucide="car" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h4 class="font-bold text-sm text-slate-100">Taxi Standard</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">4 chỗ</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-0.5">Tiết kiệm, di chuyển nhanh nội thành</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-sm text-sky-400 font-mono" id="price-standard">--</span>
+                                <p class="text-[10px] text-emerald-400 font-medium" id="eta-standard">-- phút</p>
+                            </div>
+                        </div>
+
+                        <!-- Tier 2: Premium -->
+                        <div onclick="selectVehicleTier('premium')" id="tier-premium" class="tier-card p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 cursor-pointer transition-all flex items-center justify-between">
+                            <div class="flex items-center space-x-3.5">
+                                <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                                    <i data-lucide="sparkles" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h4 class="font-bold text-sm text-slate-200">Taxi Premium Sedan</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">4 chỗ</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-0.5">Xe sang Camry/Mazda6 cao cấp</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-sm text-slate-200 font-mono" id="price-premium">--</span>
+                                <p class="text-[10px] text-slate-400" id="eta-premium">-- phút</p>
+                            </div>
+                        </div>
+
+                        <!-- Tier 3: Taxi XL -->
+                        <div onclick="selectVehicleTier('xl')" id="tier-xl" class="tier-card p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 cursor-pointer transition-all flex items-center justify-between">
+                            <div class="flex items-center space-x-3.5">
+                                <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                                    <i data-lucide="truck" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h4 class="font-bold text-sm text-slate-200">Taxi XL Family</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">7 chỗ</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-0.5">Rộng rãi cho nhóm đông & hành lý</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-sm text-slate-200 font-mono" id="price-xl">--</span>
+                                <p class="text-[10px] text-slate-400" id="eta-xl">-- phút</p>
+                            </div>
+                        </div>
+
+                        <!-- Tier 4: Bike Express -->
+                        <div onclick="selectVehicleTier('bike')" id="tier-bike" class="tier-card p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 cursor-pointer transition-all flex items-center justify-between">
+                            <div class="flex items-center space-x-3.5">
+                                <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                    <i data-lucide="bike" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h4 class="font-bold text-sm text-slate-200">Express Bike</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">1 người</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-0.5">Di chuyển siêu tốc thời giờ cao điểm</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-sm text-slate-200 font-mono" id="price-bike">--</span>
+                                <p class="text-[10px] text-emerald-400 font-medium" id="eta-bike">-- phút</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Action Panel -->
+                <div class="p-5 border-t border-slate-800/80 bg-slate-950/80 space-y-3">
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                        <span>Giá cước ước tính:</span>
+                        <span class="text-slate-200 font-semibold flex items-center space-x-1">
+                            <i data-lucide="credit-card" class="w-3.5 h-3.5 text-sky-400"></i>
+                            <span id="selectedRidePrice">--</span>
+                        </span>
+                    </div>
+
+                    <button id="btnRequestRide" onclick="initiateRideDispatch()" 
+                        class="w-full py-4 rounded-2xl font-bold text-sm bg-gradient-to-r from-sky-500 via-indigo-600 to-purple-600 hover:from-sky-400 hover:to-purple-500 text-white shadow-lg glow-blue transition-all active:scale-[0.98] flex items-center justify-center space-x-2">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                        <span>XÁC NHẬN ĐẶT XE NGAY</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- RIGHT MAP VIEWPORT -->
+            <section class="flex-1 h-[38%] md:h-full min-h-0 relative">
+                <div id="map" class="w-full h-full dark-tiles"></div>
+
+                <!-- Floating Ride Analytics Card Overlay (Top Right) -->
+                <div class="absolute top-5 right-5 z-[1000] glass-panel p-4 rounded-2xl shadow-2xl border border-slate-800 max-w-xs w-full space-y-3 hidden sm:block">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Thông Tin Lộ Trình</span>
+                        <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono">Tối Ưu</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-center">
+                        <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                            <p class="text-[10px] text-slate-400">Quãng đường ước tính</p>
+                            <p class="text-base font-bold text-sky-400 font-mono mt-0.5" id="routeDistanceText">-- km</p>
+                        </div>
+                        <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                            <p class="text-[10px] text-slate-400">Thời gian đi</p>
+                            <p class="text-base font-bold text-emerald-400 font-mono mt-0.5" id="routeTimeText">-- phút</p>
+                        </div>
+                    </div>
+                </div>
+                <p class="absolute bottom-2 left-3 text-[10px] text-slate-500 sm:bottom-3 sm:left-4">Cước và thời gian tham khảo; chưa tính lộ trình đường thực tế.</p>
+
+                <div id="activeDriverOverlay" class="absolute bottom-5 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-2rem)] max-w-lg glass-panel p-4 rounded-2xl shadow-2xl border border-slate-700/80 hidden">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex gap-3">
+                            <div class="w-10 h-10 shrink-0 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                                <i data-lucide="clock-3" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-sm text-slate-100">Yêu cầu đã được ghi nhận</h4>
+                                <p class="text-xs text-slate-400 mt-1">Mã chuyến <span id="activeRideNumber" class="font-mono text-sky-400"></span></p>
+                                <p id="activeRideStatus" class="text-xs text-amber-300 mt-2">Đang chờ hệ thống phân công tài xế.</p>
+                            </div>
+                        </div>
+                        <button onclick="cancelActiveTrip()" title="Hủy chuyến" aria-label="Hủy chuyến" class="p-2 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors border border-slate-700">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- TAB 2: TRIP HISTORY & REVENUE DASHBOARD -->
+        <div id="view-history" class="hidden w-full h-full p-6 lg:p-10 overflow-y-auto custom-scrollbar space-y-8 bg-[#080C14]">
+            <div class="max-w-6xl mx-auto space-y-6">
+                <!-- Header Title -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-100">Lịch Sử Chuyến Đi</h1>
+                        <p class="text-xs text-slate-400 mt-1">Danh sách yêu cầu đặt xe được lưu trong hệ thống</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="exportHistoryCSV()" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 flex items-center space-x-2 transition-all">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            <span>Xuất File CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Summary Row -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800">
+                        <div class="flex items-center justify-between text-slate-400 mb-2">
+                            <span class="text-xs font-medium">Tổng chuyến</span>
+                            <i data-lucide="car" class="w-4 h-4 text-sky-400"></i>
+                        </div>
+                        <p class="text-2xl font-extrabold text-sky-400 font-mono" id="totalRidesValue">0</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Từ dữ liệu PostgreSQL</p>
+                    </div>
+
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800">
+                        <div class="flex items-center justify-between text-slate-400 mb-2">
+                            <span class="text-xs font-medium">Đang chờ</span>
+                            <i data-lucide="clock-3" class="w-4 h-4 text-amber-400"></i>
+                        </div>
+                        <p class="text-2xl font-extrabold text-amber-400 font-mono" id="pendingRidesValue">0</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Chờ xác nhận tài xế</p>
+                    </div>
+
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800">
+                        <div class="flex items-center justify-between text-slate-400 mb-2">
+                            <span class="text-xs font-medium">Đã phân công</span>
+                            <i data-lucide="user-check" class="w-4 h-4 text-emerald-400"></i>
+                        </div>
+                        <p class="text-2xl font-extrabold text-emerald-400 font-mono" id="assignedRidesValue">0</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Có tài xế phụ trách</p>
+                    </div>
+
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800">
+                        <div class="flex items-center justify-between text-slate-400 mb-2">
+                            <span class="text-xs font-medium">Hoàn thành</span>
+                            <i data-lucide="check-circle-2" class="w-4 h-4 text-teal-400"></i>
+                        </div>
+                        <p class="text-2xl font-extrabold text-teal-400 font-mono" id="completedRidesValue">0</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Chuyến đã hoàn tất</p>
+                    </div>
+                </div>
+
+                <!-- History Table -->
+                <div class="glass-card rounded-3xl border border-slate-800/80 overflow-hidden shadow-2xl">
+                    <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-200">Danh Sách Chuyến Đi Vừa Ghi Nhận</h3>
+                        <span class="text-xs text-slate-400 font-mono">PostgreSQL Database Sync</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-900/80 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                                    <th class="p-4">Mã Trip ID</th>
+                                    <th class="p-4">Khách Hàng</th>
+                                    <th class="p-4">Hành Trình</th>
+                                    <th class="p-4">Loại Xe</th>
+                                    <th class="p-4">Cước ước tính</th>
+                                    <th class="p-4">Tài Xế</th>
+                                    <th class="p-4">Trạng Thái</th>
+                                    <th class="p-4">Điều Khiển</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/60 text-xs" id="historyTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-management" class="hidden w-full h-full p-6 lg:p-10 overflow-y-auto custom-scrollbar space-y-8 bg-[#080C14]">
+            <div class="max-w-6xl mx-auto space-y-6">
+                <div class="border-b border-slate-800 pb-6">
+                    <h1 class="text-2xl font-bold text-slate-100">Điều Phối & Quản Lý Khách</h1>
+                    <p class="text-xs text-slate-400 mt-1">Quản lý tài xế hoạt động và theo dõi khách hàng từ lịch sử chuyến đi</p>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <section class="glass-card rounded-2xl border border-slate-800 overflow-hidden">
+                        <div class="p-5 border-b border-slate-800">
+                            <h2 class="text-sm font-bold text-slate-100">Đội ngũ tài xế</h2>
+                        </div>
+                        <form id="driverForm" class="p-5 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3">
+                            <input id="driverNameInput" type="text" maxlength="100" required placeholder="Tên tài xế" class="min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none">
+                            <input id="driverPhoneInput" type="tel" maxlength="30" placeholder="Số điện thoại (không bắt buộc)" class="min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none">
+                            <button type="submit" class="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-colors">Thêm tài xế</button>
+                        </form>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-900/80 text-[10px] uppercase text-slate-400">
+                                    <tr><th class="p-4">Tài xế</th><th class="p-4">Điện thoại</th><th class="p-4">Trạng thái</th><th class="p-4">Thao tác</th></tr>
+                                </thead>
+                                <tbody id="driverTableBody" class="divide-y divide-slate-800/60 text-xs"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="glass-card rounded-2xl border border-slate-800 overflow-hidden">
+                        <div class="p-5 border-b border-slate-800">
+                            <h2 class="text-sm font-bold text-slate-100">Khách hàng</h2>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-900/80 text-[10px] uppercase text-slate-400">
+                                    <tr><th class="p-4">Khách hàng</th><th class="p-4">Điện thoại</th><th class="p-4">Số chuyến</th><th class="p-4">Chuyến gần nhất</th><th class="p-4">Thao tác</th></tr>
+                                </thead>
+                                <tbody id="customerTableBody" class="divide-y divide-slate-800/60 text-xs"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: OBSERVABILITY & METRICS SYSTEM MONITORING -->
+        <div id="view-observability" class="hidden w-full h-full p-6 lg:p-10 overflow-y-auto custom-scrollbar space-y-8 bg-[#080C14]">
+            <div class="max-w-6xl mx-auto space-y-6">
+                <!-- Header Title -->
+                <div class="flex items-center justify-between border-b border-slate-800 pb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-100 flex items-center space-x-3">
+                            <span>Giám Sát Hệ Thống Cluster (Đề 22)</span>
+                            <span class="px-3 py-1 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs font-mono font-semibold">Prometheus + Loki</span>
+                        </h1>
+                        <p class="text-xs text-slate-400 mt-1">Bảng điều khiển đo lường tài nguyên và tập trung log hệ thống thời gian thực</p>
+                    </div>
+                </div>
+
+                <!-- Live System Gauges -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>CPU Utilization</span>
+                            <i data-lucide="cpu" class="w-4 h-4 text-sky-400"></i>
+                        </div>
+                        <p class="text-3xl font-black text-sky-400 font-mono" id="obsCpuValue">--%</p>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="obsCpuBar" class="bg-sky-400 h-full w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>RAM Usage</span>
+                            <i data-lucide="hard-drive" class="w-4 h-4 text-purple-400"></i>
+                        </div>
+                        <p class="text-3xl font-black text-purple-400 font-mono" id="obsRamValue">--%</p>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="obsRamBar" class="bg-purple-400 h-full w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>HTTP Requests / sec</span>
+                            <i data-lucide="zap" class="w-4 h-4 text-emerald-400"></i>
+                        </div>
+                        <p class="text-3xl font-black text-emerald-400 font-mono" id="obsReqValue">-- r/s</p>
+                        <p class="text-[11px] text-slate-400">Độ trễ p95: <span id="obsLatencyValue">--</span> ms</p>
+                    </div>
+
+                    <div class="glass-card p-5 rounded-3xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>Docker Containers</span>
+                            <i data-lucide="box" class="w-4 h-4 text-amber-400"></i>
+                        </div>
+                        <p class="text-3xl font-black text-amber-400 font-mono" id="obsContainersValue">-- / 11</p>
+                        <p class="text-[11px] text-slate-400">Containers đang hoạt động</p>
+                    </div>
+                </div>
+
+                <!-- Live Centralized Log Console Stream -->
+                <div class="glass-card rounded-3xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col">
+                    <div class="p-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+                            <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                            <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                            <span class="text-xs font-mono font-bold text-slate-300 ml-2">Loki · taxi-web-app</span>
+                        </div>
+                        <span id="lokiStreamStatus" class="text-[10px] bg-slate-700/50 text-slate-400 border border-slate-600 px-2 py-0.5 rounded-full font-mono">ĐANG KẾT NỐI</span>
+                    </div>
+
+                    <div id="lokiLogStream" class="p-5 font-mono text-xs space-y-2 h-80 overflow-y-auto bg-slate-950 custom-scrollbar">
+                        <p class="text-slate-500">Đang tải log mới nhất từ Loki...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <dialog id="adminAuthDialog" class="w-[min(100%-2rem,28rem)] rounded-2xl border border-slate-700 bg-slate-950 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+        <form id="adminAuthForm" class="space-y-5 p-6">
+            <div>
+                <h2 class="text-lg font-bold">Đăng nhập quản trị</h2>
+                <p class="mt-1 text-xs text-slate-400">Xác thực để xem dữ liệu và điều phối chuyến.</p>
+            </div>
+            <p id="adminAuthError" class="hidden text-xs text-rose-300"></p>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-semibold text-slate-300">Tài khoản</span>
+                <input id="adminUsernameInput" name="username" autocomplete="username" required class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm focus:border-sky-500 focus:outline-none">
+            </label>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-semibold text-slate-300">Mật khẩu</span>
+                <input id="adminPasswordInput" name="password" type="password" autocomplete="current-password" required class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm focus:border-sky-500 focus:outline-none">
+            </label>
+            <div class="flex justify-end gap-2">
+                <button id="adminAuthCancel" type="button" class="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-900">Hủy</button>
+                <button type="submit" class="rounded-xl bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400">Đăng nhập</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-6 right-6 z-[9999] space-y-3 pointer-events-none"></div>
+
+    <!-- JAVASCRIPT APP LOGIC -->
+    <script>
+        // --- LUCIDE ICONS INIT ---
+        lucide.createIcons();
+
+        let adminAuthorization = null;
+        let adminAuthPromise = null;
+        let resolveAdminAuth = null;
+        const adminAuthDialog = document.getElementById('adminAuthDialog');
+        const adminAuthError = document.getElementById('adminAuthError');
+
+        function requestAdminAuth(errorMessage = '') {
+            if (adminAuthorization) return Promise.resolve(adminAuthorization);
+            if (adminAuthPromise) return adminAuthPromise;
+
+            const form = document.getElementById('adminAuthForm');
+            form.reset();
+            adminAuthError.textContent = errorMessage;
+            adminAuthError.classList.toggle('hidden', !errorMessage);
+            adminAuthDialog.showModal();
+            document.getElementById('adminUsernameInput').focus();
+            adminAuthPromise = new Promise(resolve => {
+                resolveAdminAuth = resolve;
+            });
+            return adminAuthPromise;
+        }
+
+        function finishAdminAuth(authorization) {
+            adminAuthDialog.close();
+            const resolve = resolveAdminAuth;
+            resolveAdminAuth = null;
+            adminAuthPromise = null;
+            if (resolve) resolve(authorization);
+        }
+
+        function encodeBasicCredentials(username, password) {
+            const bytes = new TextEncoder().encode(`${username}:${password}`);
+            const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+            return `Basic ${btoa(binary)}`;
+        }
+
+        async function adminFetch(url, options = {}) {
+            let authorization = adminAuthorization || await requestAdminAuth();
+            if (!authorization) throw new DOMException('Đã hủy đăng nhập', 'AbortError');
+
+            const headers = new Headers(options.headers || {});
+            headers.set('Authorization', authorization);
+            let response = await fetch(url, { ...options, headers });
+            if (response.status !== 401) return response;
+
+            adminAuthorization = null;
+            authorization = await requestAdminAuth('Tài khoản hoặc mật khẩu không đúng.');
+            if (!authorization) throw new DOMException('Đã hủy đăng nhập', 'AbortError');
+            headers.set('Authorization', authorization);
+            response = await fetch(url, { ...options, headers });
+            if (response.status === 401) adminAuthorization = null;
+            return response;
+        }
+
+        document.getElementById('adminAuthForm').addEventListener('submit', event => {
+            event.preventDefault();
+            const username = document.getElementById('adminUsernameInput').value;
+            const password = document.getElementById('adminPasswordInput').value;
+            adminAuthorization = encodeBasicCredentials(username, password);
+            document.getElementById('adminPasswordInput').value = '';
+            finishAdminAuth(adminAuthorization);
+        });
+
+        document.getElementById('adminAuthCancel').addEventListener('click', () => finishAdminAuth(null));
+        adminAuthDialog.addEventListener('cancel', event => {
+            event.preventDefault();
+            finishAdminAuth(null);
+        });
+
+        // --- MAP INITIALIZATION (LeafletJS) ---
+        // Default coordinates: Thái Nguyên City
+        const MAP_CENTER = [21.5928, 105.8442];
+        const map = L.map('map', { zoomControl: false }).setView(MAP_CENTER, 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        // Map Locations & Icons
+        let pickupCoords = [21.5850, 105.8320]; // ĐH Thái Nguyên
+        let dropoffCoords = [21.5980, 105.8520]; // Bến xe Thái Nguyên
+
+        // Custom Leaflet Icons using SVGs
+        const greenPinIcon = L.divIcon({
+            className: 'custom-pin-green',
+            html: `<div class="w-8 h-8 rounded-full bg-emerald-500 border-2 border-white shadow-lg flex items-center justify-center text-white"><i class="fa-solid fa-circle-dot text-sm"></i></div>`,
+            iconSize: [32, 32], iconAnchor: [16, 16]
+        });
+
+        const redPinIcon = L.divIcon({
+            className: 'custom-pin-red',
+            html: `<div class="w-8 h-8 rounded-full bg-rose-500 border-2 border-white shadow-lg flex items-center justify-center text-white"><i class="fa-solid fa-location-dot text-sm"></i></div>`,
+            iconSize: [32, 32], iconAnchor: [16, 16]
+        });
+
+        let pickupMarker = L.marker(pickupCoords, { icon: greenPinIcon }).addTo(map).bindPopup('Điểm đón');
+        let dropoffMarker = L.marker(dropoffCoords, { icon: redPinIcon }).addTo(map).bindPopup('Điểm đến');
+        let routePolyline = L.polyline([pickupCoords, dropoffCoords], { color: '#0ea5e9', weight: 4, opacity: 0.8, dashArray: '8, 8' }).addTo(map);
+        const knownLocations = new Map([
+            ['đại học thái nguyên', [21.5850, 105.8320]],
+            ['bến xe thái nguyên', [21.5980, 105.8520]],
+            ['bệnh viện đa khoa', [21.5908, 105.8408]],
+            ['vincom plaza thái nguyên', [21.5940, 105.8500]],
+            ['quảng trường võ nguyên giáp', [21.5928, 105.8442]],
+            ['sân bay nội bài', [21.2187, 105.8042]],
+        ]);
+
+        function parseLocationCoordinates(value) {
+            const normalized = value.trim().toLocaleLowerCase('vi-VN');
+            if (knownLocations.has(normalized)) return knownLocations.get(normalized);
+            const match = normalized.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+            if (!match) return null;
+            const coordinates = [Number(match[1]), Number(match[2])];
+            return coordinates[0] >= -90 && coordinates[0] <= 90 && coordinates[1] >= -180 && coordinates[1] <= 180
+                ? coordinates
+                : null;
+        }
+
+        function setRoutePoint(point, coordinates) {
+            const isPickup = point === 'pickup';
+            const marker = isPickup ? pickupMarker : dropoffMarker;
+            if (isPickup) pickupCoords = coordinates;
+            else dropoffCoords = coordinates;
+
+            if (coordinates) {
+                marker.setLatLng(coordinates);
+                if (!map.hasLayer(marker)) marker.addTo(map);
+            } else if (map.hasLayer(marker)) {
+                map.removeLayer(marker);
+            }
+            updateRoutePolyline();
+        }
+
+        // Interactive Map Click Selection
+        let clickSelectState = 'pickup';
+        map.on('click', (e) => {
+            if (clickSelectState === 'pickup') {
+                const coordinates = [e.latlng.lat, e.latlng.lng];
+                document.getElementById('pickupInput').value = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+                setRoutePoint('pickup', coordinates);
+                clickSelectState = 'dropoff';
+                showToast('Đã chọn Điểm Đón trên bản đồ. Nhấp tiếp để chọn Điểm Đến!', 'info');
+            } else {
+                const coordinates = [e.latlng.lat, e.latlng.lng];
+                document.getElementById('dropoffInput').value = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+                setRoutePoint('dropoff', coordinates);
+                clickSelectState = 'pickup';
+                showToast('Đã cập nhật Điểm Đến!', 'info');
+            }
+        });
+
+        function updateRoutePolyline() {
+            if (!pickupCoords || !dropoffCoords) {
+                routePolyline.setLatLngs([]);
+                currentEstimate = null;
+                renderEstimate(null);
+                return;
+            }
+            routePolyline.setLatLngs([pickupCoords, dropoffCoords]);
+            map.fitBounds(L.latLngBounds([pickupCoords, dropoffCoords]), { padding: [80, 80] });
+            refreshEstimate();
+        }
+
+        document.getElementById('pickupInput').addEventListener('change', event => {
+            const coordinates = parseLocationCoordinates(event.target.value);
+            if (!coordinates) showToast('Địa điểm chưa có tọa độ. Chọn vị trí trên bản đồ hoặc dùng lộ trình nhanh.', 'warning');
+            setRoutePoint('pickup', coordinates);
+        });
+        document.getElementById('dropoffInput').addEventListener('change', event => {
+            const coordinates = parseLocationCoordinates(event.target.value);
+            if (!coordinates) showToast('Địa điểm chưa có tọa độ. Chọn vị trí trên bản đồ hoặc dùng lộ trình nhanh.', 'warning');
+            setRoutePoint('dropoff', coordinates);
+        });
+
+        let selectedTier = 'standard';
+        let currentEstimate = null;
+        let estimateRequestSequence = 0;
+
+        function renderEstimate(estimate) {
+            currentEstimate = estimate;
+            const vehicles = estimate?.vehicles || {};
+            for (const tier of ['standard', 'premium', 'xl', 'bike']) {
+                const vehicleEstimate = vehicles[tier];
+                document.getElementById(`price-${tier}`).textContent = vehicleEstimate
+                    ? `${vehicleEstimate.fare.toLocaleString('vi-VN')}đ`
+                    : '--';
+                document.getElementById(`eta-${tier}`).textContent = vehicleEstimate
+                    ? `${vehicleEstimate.durationMinutes} phút`
+                    : '-- phút';
+            }
+            document.getElementById('selectedRidePrice').textContent = vehicles[selectedTier]
+                ? `${vehicles[selectedTier].fare.toLocaleString('vi-VN')}đ`
+                : '--';
+            document.getElementById('routeDistanceText').textContent = estimate
+                ? `${estimate.distanceKm.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km`
+                : '-- km';
+            document.getElementById('routeTimeText').textContent = vehicles[selectedTier]
+                ? `${vehicles[selectedTier].durationMinutes} phút`
+                : '-- phút';
+        }
+
+        async function refreshEstimate() {
+            const requestSequence = ++estimateRequestSequence;
+            if (!pickupCoords || !dropoffCoords) {
+                renderEstimate(null);
+                return;
+            }
+            const params = new URLSearchParams({
+                pickup_latitude: String(pickupCoords[0]),
+                pickup_longitude: String(pickupCoords[1]),
+                dropoff_latitude: String(dropoffCoords[0]),
+                dropoff_longitude: String(dropoffCoords[1]),
+            });
+            try {
+                const response = await fetch(`/api/estimates/ride?${params}`);
+                if (!response.ok) throw new Error('Không tính được cước cho lộ trình này');
+                const estimate = await response.json();
+                if (requestSequence === estimateRequestSequence) renderEstimate(estimate);
+            } catch (error) {
+                if (requestSequence === estimateRequestSequence) renderEstimate(null);
+                showToast(error.message, 'warning');
+            }
+        }
+
+        updateRoutePolyline();
+
+        // --- NAVIGATION SWITCHING ---
+        function switchTab(tabId) {
+            ['booking', 'history', 'management', 'observability'].forEach(id => {
+                document.getElementById(`view-${id}`).classList.add('hidden');
+                const btn = document.getElementById(`tab-btn-${id}`);
+                if (btn) btn.className = "px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all";
+            });
+
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+            if (activeBtn) activeBtn.className = "px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-2 bg-sky-500/10 text-sky-400 border border-sky-500/20 transition-all";
+
+            if (tabId === 'booking') {
+                setTimeout(() => map.invalidateSize(), 200);
+            }
+            if (tabId === 'history') loadRides();
+            if (tabId === 'management') {
+                loadDrivers();
+                loadCustomers();
+            }
+            if (tabId === 'observability') loadObservability();
+        }
+
+        function toggleMobileNav() {
+            document.getElementById('mobileNav').classList.toggle('hidden');
+        }
+
+        // --- VEHICLE TIER SELECTION ---
+        const tierNames = { standard: 'Taxi Standard', premium: 'Taxi Premium Sedan', xl: 'Taxi XL Family', bike: 'Express Bike' };
+
+        function selectVehicleTier(tier) {
+            selectedTier = tier;
+            renderEstimate(currentEstimate);
+            ['standard', 'premium', 'xl', 'bike'].forEach(t => {
+                const el = document.getElementById(`tier-${t}`);
+                if (t === tier) {
+                    el.className = "tier-card p-3.5 rounded-2xl border border-sky-500 bg-sky-500/10 cursor-pointer transition-all flex items-center justify-between";
+                } else {
+                    el.className = "tier-card p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 cursor-pointer transition-all flex items-center justify-between";
+                }
+            });
+        }
+
+        // --- BOOKING API ---
+        let activeRideId = null;
+        let activeRideCancellationToken = null;
+        let ridesCache = [];
+        let driversCache = [];
+
+        async function initiateRideDispatch() {
+            const btn = document.getElementById('btnRequestRide');
+            const customerName = document.getElementById('customerNameInput').value.trim();
+            const customerPhone = document.getElementById('customerPhoneInput').value.trim();
+            const pickup = document.getElementById('pickupInput').value.trim();
+            const dropoff = document.getElementById('dropoffInput').value.trim();
+
+            if (!customerName || !pickup || !dropoff || !pickupCoords || !dropoffCoords) {
+                showToast('Nhập tên khách và chọn đủ điểm đón/đến trên bản đồ hoặc từ lộ trình nhanh.', 'warning');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>ĐANG GỬI YÊU CẦU...</span>`;
+            lucide.createIcons();
+
+            try {
+                const response = await fetch('/api/rides', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_name: customerName,
+                        customer_phone: customerPhone,
+                        pickup_location: pickup,
+                        dropoff_location: dropoff,
+                        pickup_latitude: pickupCoords[0],
+                        pickup_longitude: pickupCoords[1],
+                        dropoff_latitude: dropoffCoords[0],
+                        dropoff_longitude: dropoffCoords[1],
+                        vehicle_type: selectedTier
+                    })
+                });
+                const ride = await response.json();
+                if (!response.ok) throw new Error(ride.error || 'Không thể tạo chuyến đi');
+
+                activeRideId = ride.id;
+                activeRideCancellationToken = ride.cancellation_token;
+                document.getElementById('activeRideNumber').textContent = `#${ride.id}`;
+                document.getElementById('activeRideStatus').textContent = getRideStatus(ride.status).label;
+                document.getElementById('activeDriverOverlay').classList.remove('hidden');
+                lucide.createIcons();
+                showToast('Đã lưu yêu cầu đặt xe.', 'success');
+            } catch (error) {
+                showToast(error.message === 'Failed to fetch' ? 'Không kết nối được máy chủ. Vui lòng thử lại.' : error.message, 'warning');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="send" class="w-4 h-4"></i><span>XÁC NHẬN ĐẶT XE NGAY</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        function getRideStatus(status = '') {
+            const normalized = status.toUpperCase();
+            const statusMap = {
+                PENDING: { label: 'Đang chờ tài xế', className: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
+                ASSIGNED: { label: 'Đã phân công', className: 'bg-sky-500/10 text-sky-300 border-sky-500/20' },
+                ACCEPTED: { label: 'Đã xác nhận', className: 'bg-sky-500/10 text-sky-300 border-sky-500/20' },
+                IN_PROGRESS: { label: 'Đang thực hiện', className: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' },
+                COMPLETED: { label: 'Hoàn thành', className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+                CANCELLED: { label: 'Đã hủy', className: 'bg-rose-500/10 text-rose-300 border-rose-500/20' }
+            };
+            return statusMap[normalized] || { label: status || 'Không rõ', className: 'bg-slate-700/50 text-slate-300 border-slate-600' };
+        }
+
+        async function loadRides(silent = false) {
+            const tbody = document.getElementById('historyTableBody');
+            try {
+                const response = await adminFetch('/api/rides');
+                if (!response.ok) throw new Error('Không thể tải lịch sử chuyến đi');
+                ridesCache = await response.json();
+                await loadDrivers(true);
+                renderRides(ridesCache);
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                tbody.replaceChildren();
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 8;
+                cell.className = 'p-6 text-center text-slate-400';
+                cell.textContent = 'Chưa kết nối được dữ liệu chuyến đi.';
+                row.appendChild(cell);
+                tbody.appendChild(row);
+                if (!silent) showToast(error.message, 'warning');
+            }
+        }
+
+        function renderRides(rides) {
+            const tbody = document.getElementById('historyTableBody');
+            const countStatus = status => rides.filter(ride => (ride.status || '').toUpperCase() === status).length;
+            document.getElementById('totalRidesValue').textContent = rides.length;
+            document.getElementById('pendingRidesValue').textContent = countStatus('PENDING');
+            document.getElementById('assignedRidesValue').textContent = rides.filter(ride => ride.driver_name && !['COMPLETED', 'CANCELLED'].includes((ride.status || '').toUpperCase())).length;
+            document.getElementById('completedRidesValue').textContent = countStatus('COMPLETED');
+            tbody.replaceChildren();
+
+            if (!rides.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 8;
+                cell.className = 'p-8 text-center text-slate-400';
+                cell.textContent = 'Chưa có chuyến đi nào được ghi nhận.';
+                row.appendChild(cell);
+                tbody.appendChild(row);
+                return;
+            }
+
+            rides.forEach(ride => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-slate-900/40 transition-colors';
+                const values = [
+                    { text: `#${ride.id}`, className: 'p-4 font-mono text-sky-400 font-semibold' },
+                    { text: ride.customer_name, className: 'p-4 font-medium text-slate-200' },
+                    { text: `${ride.pickup_location} → ${ride.dropoff_location}`, className: 'p-4 min-w-64' },
+                    { text: tierNames[ride.vehicle_type] || tierNames.standard, className: 'p-4 text-slate-400' },
+                    { text: ride.estimated_fare ? `${Number(ride.estimated_fare).toLocaleString('vi-VN')}đ` : 'Chưa có ước tính', className: 'p-4 whitespace-nowrap text-slate-300' },
+                    { text: ride.driver_name || 'Chưa phân công', className: 'p-4 text-slate-400' }
+                ];
+                values.forEach(value => {
+                    const cell = document.createElement('td');
+                    cell.className = value.className;
+                    cell.textContent = value.text || '';
+                    row.appendChild(cell);
+                });
+
+                const statusCell = document.createElement('td');
+                statusCell.className = 'p-4';
+                const statusBadge = document.createElement('span');
+                const status = getRideStatus(ride.status);
+                statusBadge.className = `px-2.5 py-1 rounded-full border font-semibold whitespace-nowrap ${status.className}`;
+                statusBadge.textContent = status.label;
+                statusCell.appendChild(statusBadge);
+                row.appendChild(statusCell);
+
+                const controlsCell = document.createElement('td');
+                controlsCell.className = 'p-3 min-w-64';
+                const controls = document.createElement('div');
+                controls.className = 'flex flex-col gap-2';
+                const driverSelect = document.createElement('select');
+                driverSelect.dataset.driverSelect = '';
+                driverSelect.className = 'w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-[11px] text-slate-200';
+                const unassignedOption = document.createElement('option');
+                unassignedOption.value = '';
+                unassignedOption.textContent = 'Chưa phân công';
+                driverSelect.appendChild(unassignedOption);
+                driversCache.forEach(driver => {
+                    const option = document.createElement('option');
+                    option.value = driver.id;
+                    option.textContent = driver.is_active ? driver.name : `${driver.name} (ngừng hoạt động)`;
+                    option.disabled = !driver.is_active;
+                    option.selected = Number(ride.driver_id) === driver.id;
+                    driverSelect.appendChild(option);
+                });
+
+                const statusSelect = document.createElement('select');
+                statusSelect.dataset.statusSelect = '';
+                statusSelect.className = 'w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-[11px] text-slate-200';
+                ['PENDING', 'ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = getRideStatus(value).label;
+                    option.selected = (ride.status || 'PENDING').toUpperCase() === value;
+                    statusSelect.appendChild(option);
+                });
+
+                const saveButton = document.createElement('button');
+                saveButton.type = 'button';
+                saveButton.dataset.saveRide = ride.id;
+                saveButton.className = 'inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 px-2.5 py-2 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20';
+                saveButton.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i><span>Lưu thay đổi</span>';
+                controls.append(driverSelect, statusSelect, saveButton);
+                controlsCell.appendChild(controls);
+                row.appendChild(controlsCell);
+                tbody.appendChild(row);
+            });
+            lucide.createIcons();
+        }
+
+        async function loadDrivers(silent = false) {
+            const tbody = document.getElementById('driverTableBody');
+            try {
+                const response = await adminFetch('/api/drivers');
+                if (!response.ok) throw new Error('Không thể tải danh sách tài xế');
+                driversCache = await response.json();
+                if (!tbody) return;
+                tbody.replaceChildren();
+                if (!driversCache.length) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="4" class="p-6 text-center text-slate-400">Chưa có tài xế. Thêm tài xế ở biểu mẫu phía trên.</td>';
+                    tbody.appendChild(row);
+                    return;
+                }
+                driversCache.forEach(driver => {
+                    const row = document.createElement('tr');
+                    const values = [driver.name, driver.phone || 'Chưa cập nhật', driver.is_active ? 'Đang hoạt động' : 'Ngừng hoạt động'];
+                    values.forEach((value, index) => {
+                        const cell = document.createElement('td');
+                        cell.className = index === 0 ? 'p-4 font-medium text-slate-200' : 'p-4 text-slate-400';
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    });
+                    const actionCell = document.createElement('td');
+                    actionCell.className = 'p-4';
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.dataset.driverToggle = driver.id;
+                    button.dataset.active = String(driver.is_active);
+                    button.className = driver.is_active
+                        ? 'text-xs font-semibold text-amber-300 hover:text-amber-200'
+                        : 'text-xs font-semibold text-emerald-300 hover:text-emerald-200';
+                    button.textContent = driver.is_active ? 'Tạm ngừng' : 'Kích hoạt';
+                    actionCell.appendChild(button);
+                    row.appendChild(actionCell);
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                if (!silent) showToast(error.message, 'warning');
+            }
+        }
+
+        async function loadCustomers(silent = false) {
+            const tbody = document.getElementById('customerTableBody');
+            try {
+                const response = await adminFetch('/api/customers');
+                if (!response.ok) throw new Error('Không thể tải danh sách khách hàng');
+                const customers = await response.json();
+                tbody.replaceChildren();
+                if (!customers.length) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="5" class="p-6 text-center text-slate-400">Chưa có khách hàng từ lịch sử chuyến đi.</td>';
+                    tbody.appendChild(row);
+                    return;
+                }
+                customers.forEach(customer => {
+                    const row = document.createElement('tr');
+                    const nameCell = document.createElement('td');
+                    nameCell.className = 'p-3';
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.maxLength = 100;
+                    nameInput.value = customer.name;
+                    nameInput.dataset.customerName = '';
+                    nameInput.className = 'w-full min-w-36 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-100';
+                    nameCell.appendChild(nameInput);
+                    row.appendChild(nameCell);
+
+                    const phoneCell = document.createElement('td');
+                    phoneCell.className = 'p-3';
+                    const phoneInput = document.createElement('input');
+                    phoneInput.type = 'tel';
+                    phoneInput.maxLength = 30;
+                    phoneInput.value = customer.phone || '';
+                    phoneInput.placeholder = 'Chưa cập nhật';
+                    phoneInput.dataset.customerPhone = '';
+                    phoneInput.className = 'w-full min-w-36 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-100';
+                    phoneCell.appendChild(phoneInput);
+                    row.appendChild(phoneCell);
+
+                    const countCell = document.createElement('td');
+                    countCell.className = 'p-4 text-slate-300';
+                    countCell.textContent = customer.ride_count;
+                    row.appendChild(countCell);
+
+                    const lastRideCell = document.createElement('td');
+                    lastRideCell.className = 'p-4 text-slate-400 whitespace-nowrap';
+                    lastRideCell.textContent = customer.last_ride_at ? new Date(customer.last_ride_at).toLocaleString('vi-VN') : 'Chưa có chuyến';
+                    row.appendChild(lastRideCell);
+
+                    const actionCell = document.createElement('td');
+                    actionCell.className = 'p-3';
+                    const saveButton = document.createElement('button');
+                    saveButton.type = 'button';
+                    saveButton.dataset.saveCustomer = customer.id;
+                    saveButton.className = 'rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-2 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20';
+                    saveButton.textContent = 'Lưu';
+                    actionCell.appendChild(saveButton);
+                    row.appendChild(actionCell);
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                if (!silent) showToast(error.message, 'warning');
+            }
+        }
+
+        async function updateRide(rideId, driverValue, status) {
+            try {
+                const response = await adminFetch(`/api/rides/${rideId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ driver_id: driverValue ? Number(driverValue) : null, status })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Không thể cập nhật chuyến đi');
+                showToast(`Đã cập nhật chuyến #${rideId}.`, 'success');
+                await loadRides(true);
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                showToast(error.message, 'warning');
+            }
+        }
+
+        async function updateCustomer(customerId, name, phone) {
+            try {
+                const response = await adminFetch(`/api/customers/${customerId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone: phone || null })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Không thể cập nhật khách hàng');
+                await loadCustomers(true);
+                await loadRides(true);
+                showToast('Đã cập nhật hồ sơ khách hàng.', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                showToast(error.message, 'warning');
+            }
+        }
+
+        async function toggleDriver(driverId, isActive) {
+            try {
+                const response = await adminFetch(`/api/drivers/${driverId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: !isActive })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Không thể cập nhật tài xế');
+                await loadDrivers(true);
+                showToast(result.is_active ? 'Đã kích hoạt tài xế.' : 'Đã tạm ngừng tài xế.', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                showToast(error.message, 'warning');
+            }
+        }
+
+        async function cancelActiveTrip() {
+            if (!activeRideId || !window.confirm('Bạn có chắc muốn hủy yêu cầu chuyến đi này?')) return;
+            try {
+                const response = await fetch(`/api/rides/${activeRideId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: activeRideCancellationToken })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Không thể hủy chuyến đi');
+                document.getElementById('activeDriverOverlay').classList.add('hidden');
+                activeRideId = null;
+                activeRideCancellationToken = null;
+                showToast('Đã hủy yêu cầu chuyến đi.', 'success');
+                await loadRides(true);
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                showToast(error.message, 'warning');
+            }
+        }
+
+        // --- HELPER FUNCTIONS ---
+        function clearInput(id) {
+            document.getElementById(id).value = '';
+            setRoutePoint(id === 'pickupInput' ? 'pickup' : 'dropoff', null);
+        }
+
+        function setQuickRoute(pickup, dropoff) {
+            const pickupCoordinates = knownLocations.get(pickup.toLocaleLowerCase('vi-VN'));
+            const dropoffCoordinates = knownLocations.get(dropoff.toLocaleLowerCase('vi-VN'));
+            if (!pickupCoordinates || !dropoffCoordinates) {
+                showToast('Lộ trình nhanh chưa có tọa độ.', 'warning');
+                return;
+            }
+            document.getElementById('pickupInput').value = pickup;
+            document.getElementById('dropoffInput').value = dropoff;
+            setRoutePoint('pickup', [...pickupCoordinates]);
+            setRoutePoint('dropoff', [...dropoffCoordinates]);
+            showToast(`Đã chọn lộ trình: ${pickup} ➔ ${dropoff}`, 'info');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let bgBorder = 'bg-slate-900/90 border-slate-700 text-slate-200';
+            let icon = '<i data-lucide="info" class="w-4 h-4 text-sky-400"></i>';
+
+            if (type === 'success') {
+                bgBorder = 'bg-slate-900/90 border-emerald-500/30 text-emerald-300';
+                icon = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>';
+            } else if (type === 'warning') {
+                bgBorder = 'bg-slate-900/90 border-amber-500/30 text-amber-300';
+                icon = '<i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400"></i>';
+            }
+
+            toast.className = `p-4 rounded-2xl border shadow-2xl glass-panel text-xs flex items-center space-x-3 pointer-events-auto animate-toast ${bgBorder}`;
+            toast.innerHTML = `${icon}<span>${message}</span>`;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.remove();
+            }, 3500);
+        }
+
+        function exportHistoryCSV() {
+            if (!ridesCache.length) {
+                showToast('Chưa có dữ liệu để xuất.', 'info');
+                return;
+            }
+            const columns = ['id', 'customer_name', 'pickup_location', 'dropoff_location', 'vehicle_type', 'estimated_distance_km', 'estimated_duration_min', 'estimated_fare', 'driver_name', 'status', 'created_at'];
+            const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+            const csv = [columns.join(','), ...ridesCache.map(ride => columns.map(column => csvCell(ride[column])).join(','))].join('\n');
+            const url = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'taxi-booking-rides.csv';
+            link.click();
+            URL.revokeObjectURL(url);
+            showToast('Đã xuất lịch sử chuyến đi.', 'success');
+        }
+
+        async function loadObservability(silent = false) {
+            try {
+                const response = await adminFetch('/api/observability');
+                if (!response.ok) throw new Error('Không lấy được metrics từ Prometheus');
+                const metrics = await response.json();
+                const cpu = Math.min(100, Math.max(0, metrics.cpu));
+                const memory = Math.min(100, Math.max(0, metrics.memory));
+                const targetCount = Math.round(metrics.targetCount);
+                const healthyTargets = Math.round(metrics.targets);
+
+                document.getElementById('headerCpuText').textContent = `${cpu.toFixed(1)}%`;
+                document.getElementById('obsCpuValue').textContent = `${cpu.toFixed(1)}%`;
+                document.getElementById('obsCpuBar').style.width = `${cpu}%`;
+                document.getElementById('obsRamValue').textContent = `${memory.toFixed(1)}%`;
+                document.getElementById('obsRamBar').style.width = `${memory}%`;
+                document.getElementById('obsReqValue').textContent = `${metrics.requests.toFixed(2)} r/s`;
+                document.getElementById('obsLatencyValue').textContent = metrics.latency.toFixed(1);
+                document.getElementById('obsContainersValue').textContent = `${Math.round(metrics.containers)} / 11`;
+                document.getElementById('headerTargetStatus').textContent = `${healthyTargets} / ${targetCount} UP`;
+                document.getElementById('headerTargetDot').className = `w-2 h-2 rounded-full ${healthyTargets === targetCount && targetCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`;
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                if (!silent) showToast(error.message, 'warning');
+            }
+            await loadLokiLogs(silent);
+        }
+
+        async function loadLokiLogs(silent = false) {
+            const stream = document.getElementById('lokiLogStream');
+            const status = document.getElementById('lokiStreamStatus');
+            try {
+                const response = await adminFetch('/api/observability/logs');
+                if (!response.ok) throw new Error('Không tải được log từ Loki');
+                const logs = await response.json();
+                stream.replaceChildren();
+                status.textContent = 'LOKI LIVE';
+                status.className = 'text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono';
+                if (!logs.length) {
+                    const empty = document.createElement('p');
+                    empty.className = 'text-slate-500';
+                    empty.textContent = 'Chưa có log mới trong 30 phút gần đây.';
+                    stream.appendChild(empty);
+                    return;
+                }
+                logs.forEach(log => {
+                    const entry = document.createElement('p');
+                    const timestamp = new Date(Number(log.timestamp) / 1e6).toLocaleString('vi-VN');
+                    entry.className = /error|exception|failed/i.test(log.line) ? 'text-rose-400' : 'text-slate-300';
+                    entry.textContent = `[${timestamp}] ${log.line}`;
+                    stream.appendChild(entry);
+                });
+                stream.scrollTop = 0;
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                status.textContent = 'LOKI NGOẠI TUYẾN';
+                status.className = 'text-[10px] bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2 py-0.5 rounded-full font-mono';
+                if (!silent) showToast(error.message, 'warning');
+            }
+        }
+
+        document.getElementById('driverForm').addEventListener('submit', async event => {
+            event.preventDefault();
+            const nameInput = document.getElementById('driverNameInput');
+            const phoneInput = document.getElementById('driverPhoneInput');
+            try {
+                const response = await adminFetch('/api/drivers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: nameInput.value, phone: phoneInput.value })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Không thể thêm tài xế');
+                event.target.reset();
+                await loadDrivers(true);
+                await loadRides(true);
+                showToast('Đã thêm tài xế vào danh sách.', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                showToast(error.message, 'warning');
+            }
+        });
+
+        document.getElementById('driverTableBody').addEventListener('click', event => {
+            const button = event.target.closest('[data-driver-toggle]');
+            if (button) toggleDriver(Number(button.dataset.driverToggle), button.dataset.active === 'true');
+        });
+
+        document.getElementById('historyTableBody').addEventListener('click', event => {
+            const button = event.target.closest('[data-save-ride]');
+            if (!button) return;
+            const row = button.closest('tr');
+            updateRide(button.dataset.saveRide, row.querySelector('[data-driver-select]').value, row.querySelector('[data-status-select]').value);
+        });
+
+        document.getElementById('customerTableBody').addEventListener('click', event => {
+            const button = event.target.closest('[data-save-customer]');
+            if (!button) return;
+            const row = button.closest('tr');
+            updateCustomer(button.dataset.saveCustomer, row.querySelector('[data-customer-name]').value.trim(), row.querySelector('[data-customer-phone]').value.trim());
+        });
+
+        setInterval(() => {
+            if (!document.getElementById('view-observability').classList.contains('hidden')) loadObservability(true);
+        }, 15000);
+    </script>
+</body>
+</html>

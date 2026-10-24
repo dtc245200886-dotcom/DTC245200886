@@ -7,7 +7,7 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Cài đặt dependency
-RUN npm install --only=production
+RUN npm ci --omit=dev
 
 # Sao chép mã nguồn
 COPY . .

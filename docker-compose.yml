@@ -5,6 +5,9 @@ networks:
     driver: bridge
   monitoring-net:
     driver: bridge
+  observability-log-net:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:
@@ -26,6 +29,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - backend-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
@@ -41,11 +49,12 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     networks:
       - backend-net
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   # 3. Node.js Express App
   web-app:
@@ -61,11 +70,24 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
+      LOKI_URL: http://loki:3100
+      ADMIN_USER: ${ADMIN_USER:-${PGADMIN_DEFAULT_EMAIL}}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-${PGADMIN_DEFAULT_PASSWORD}}
     networks:
       - frontend-net
       - backend-net
+      - observability-log-net
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
     deploy:
       resources:
         limits:
@@ -86,7 +108,8 @@ services:
     networks:
       - frontend-net
     depends_on:
-      - web-app
+      web-app:
+        condition: service_healthy
 
   # 5. Prometheus Monitoring Server (Commit 2)
   prometheus:
@@ -100,7 +123,7 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     networks:
       - monitoring-net
       - backend-net
@@ -110,8 +133,53 @@ services:
     image: prom/node-exporter:v1.7.0
     container_name: node-exporter
     restart: always
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     networks:
       - monitoring-net
+
+  # 7. Container Resource Exporter
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: taxi-booking-cadvisor
+    restart: always
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - monitoring-net
+
+  # 8. PostgreSQL Metrics Exporter
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_URI: postgres:5432/${POSTGRES_DB}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD}
+    networks:
+      - backend-net
+      - monitoring-net
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # 7. Grafana UI (Commit 2)
   grafana:
@@ -119,32 +187,37 @@ services:
     container_name: grafana-ui
     restart: always
     ports:
-      - "3002:3000"
+      - "127.0.0.1:3002:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=adminpassword123
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-${PGADMIN_DEFAULT_PASSWORD}}
+      GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - monitoring-net
     depends_on:
       - prometheus
-  # 8. Loki Log Aggregator (Commit 3)
+  # 10. Loki Log Aggregator
   loki:
     image: grafana/loki:2.9.3
     container_name: loki-server
     restart: always
     user: "0"
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki_data:/tmp/loki
     networks:
       - monitoring-net
+      - observability-log-net
 
-  # 9. Promtail Log Agent (Commit 3)
+  # 11. Promtail Log Agent
   promtail:
     image: grafana/promtail:2.9.3
     container_name: promtail-agent
