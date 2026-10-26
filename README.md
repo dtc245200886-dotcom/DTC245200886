@@ -1,4 +1,4 @@
-# Đồ án Đề 22: Hệ thống đặt xe Taxi Booking, giám sát và quản lý log tập trung
+# Đồ án Đề 22: Hệ thống đặt xe Taxi Booking, giám sát và quản lý log tập trung.
 
 Ứng dụng web đặt xe taxi và hệ thống vận hành được triển khai bằng Docker Compose. Các luồng mạng frontend, backend và monitoring được tách riêng.
 
