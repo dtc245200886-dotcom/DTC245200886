@@ -68,8 +68,8 @@ npm --prefix app test
 
 ## Truy cập
 
-- Ứng dụng đặt xe: `` (chấp nhận cảnh báo chứng chỉ tự ký khi chạy local).
-- pgAdmin: `http://localhttps://localhosthost:5050`.
+- Ứng dụng đặt xe: `https://localhost` (chấp nhận cảnh báo chứng chỉ tự ký khi chạy local).
+- pgAdmin: `http://localhost:5050`.
 - Prometheus: `http://localhost:9090`.
 - Grafana: `http://localhost:3002` (dashboard: **Taxi Booking Platform**).
 - Loki API: `http://localhost:3100`.
