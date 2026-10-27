@@ -72,7 +72,7 @@ npm --prefix app test
 - pgAdmin: `http://localhost:5050`.
 - Prometheus: `http://localhost:9090`.
 - Grafana: `http://localhost:3002` (dashboard: **Taxi Booking Platform**).
-- Loki API: `http://localhost:3100`.
+- Loki API: `http://localhost:3102`.
 
 Các cổng pgAdmin, Prometheus, Grafana và Loki chỉ bind vào `127.0.0.1`. API quản trị yêu cầu thông tin Basic Auth trong `.env`; đặt xe vẫn dùng endpoint tạo chuyến công khai. Prometheus thu thập metrics từ chính nó, Node Exporter, cAdvisor, PostgreSQL Exporter và endpoint `/metrics` nội bộ của ứng dụng. Grafana tự cấu hình datasource Prometheus và Loki khi khởi động. Metrics cAdvisor và log Promtail được giới hạn vào Compose project `taxi-booking`.
 
